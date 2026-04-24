@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Search, ShoppingBag, User, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { useCart } from "@/lib/CartContext";
 
 const navLinks = [
     { href: "/", label: "Home" },
@@ -15,6 +16,7 @@ const navLinks = [
 export default function Navbar() {
     const [isScrolled, setIsScrolled] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const { cartCount, setIsCartOpen } = useCart();
 
     useEffect(() => {
         const handleScroll = () => {
@@ -67,11 +69,23 @@ export default function Navbar() {
                         <button className="hover:text-gold transition-colors">
                             <User size={20} />
                         </button>
-                        <button className="hover:text-gold transition-colors relative">
+                        <button
+                            onClick={() => setIsCartOpen(true)}
+                            className="hover:text-gold transition-colors relative"
+                            id="cart-icon-btn"
+                        >
                             <ShoppingBag size={20} />
-                            <span className="absolute -top-2 -right-2 w-4 h-4 bg-gold text-black text-[10px] font-bold flex items-center justify-center rounded-full">
-                                0
-                            </span>
+                            <AnimatePresence mode="wait">
+                                <motion.span
+                                    key={cartCount}
+                                    initial={{ scale: 0.5 }}
+                                    animate={{ scale: 1 }}
+                                    exit={{ scale: 0.5 }}
+                                    className="absolute -top-2 -right-2 w-5 h-5 bg-gold text-black text-[10px] font-bold flex items-center justify-center rounded-full"
+                                >
+                                    {cartCount}
+                                </motion.span>
+                            </AnimatePresence>
                         </button>
                     </div>
                 </div>

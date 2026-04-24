@@ -6,16 +6,30 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ShoppingBag, Heart, Eye } from "lucide-react";
 import { formatPrice } from "@/lib/utils";
+import { useCart } from "@/lib/CartContext";
 
 export default function WatchCard({ watch, index, category }) {
     const [isHovered, setIsHovered] = useState(false);
     const [isWishlisted, setIsWishlisted] = useState(false);
     const router = useRouter();
+    const { addToCart } = useCart();
 
     const productUrl = `/product/${category}/${watch.id}`;
 
     const handleCardClick = () => {
         router.push(productUrl);
+    };
+
+    const handleAddToCart = (e) => {
+        e.stopPropagation();
+        addToCart({
+            id: watch.id,
+            category,
+            name: watch.name,
+            price: watch.price,
+            originalPrice: watch.originalPrice,
+            image: watch.image,
+        });
     };
 
     return (
@@ -79,7 +93,7 @@ export default function WatchCard({ watch, index, category }) {
                                 initial={{ y: 20, opacity: 0 }}
                                 animate={{ y: isHovered ? 0 : 20, opacity: isHovered ? 1 : 0 }}
                                 transition={{ delay: 0.1 }}
-                                onClick={(e) => e.stopPropagation()}
+                                onClick={handleAddToCart}
                                 className="bg-gold text-black px-6 py-3 rounded-full font-medium flex items-center gap-2 hover:bg-gold-light transition-colors"
                             >
                                 <ShoppingBag size={18} />

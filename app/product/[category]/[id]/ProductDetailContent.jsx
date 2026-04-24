@@ -19,12 +19,14 @@ import {
 } from "lucide-react";
 import { watchesData, categoryTitles } from "@/lib/products";
 import { formatPrice } from "@/lib/utils";
+import { useCart } from "@/lib/CartContext";
 
 export default function ProductDetailContent({ category, id }) {
     const [selectedImage, setSelectedImage] = useState(0);
     const [quantity, setQuantity] = useState(1);
     const [isWishlisted, setIsWishlisted] = useState(false);
     const [activeTab, setActiveTab] = useState("description");
+    const { addToCart } = useCart();
 
     // Find the product
     const watches = watchesData[category] || watchesData.men;
@@ -190,7 +192,17 @@ export default function ProductDetailContent({ category, id }) {
                             </div>
 
                             {/* Add to Cart */}
-                            <button className="flex-1 bg-gold text-black font-semibold py-3 px-8 rounded-lg flex items-center justify-center gap-2 hover:bg-gold-light transition-colors">
+                            <button
+                                onClick={() => addToCart({
+                                    id: product.id,
+                                    category,
+                                    name: product.name,
+                                    price: product.price,
+                                    originalPrice: product.originalPrice,
+                                    image: product.images[0],
+                                }, quantity)}
+                                className="flex-1 bg-gold text-black font-semibold py-3 px-8 rounded-lg flex items-center justify-center gap-2 hover:bg-gold-light transition-colors"
+                            >
                                 <ShoppingBag size={20} />
                                 Add to Cart
                             </button>
