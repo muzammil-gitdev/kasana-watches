@@ -14,7 +14,7 @@ export default function Newsletter() {
     };
 
     return (
-        <section className="py-24 bg-charcoal text-white relative overflow-hidden">
+        <section id="newsletter" className="py-24 bg-charcoal text-white relative overflow-hidden">
             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5"></div>
             <div className="container mx-auto px-6 relative z-10">
                 <div className="max-w-2xl mx-auto text-center">

@@ -8,7 +8,7 @@ const categories = [
     {
         id: "mens",
         title: "Men's Collection",
-        image: "https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&q=80&w=800",
+        image: "https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?auto=format&fit=crop&q=80&w=800",
         href: "/collection/men",
     },
     {
@@ -27,7 +27,7 @@ const categories = [
 
 export default function CategorySection() {
     return (
-        <section className="py-24 bg-background">
+        <section id="collection" className="py-24 bg-background">
             <div className="container mx-auto px-6">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
