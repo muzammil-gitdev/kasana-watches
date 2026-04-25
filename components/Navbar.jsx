@@ -6,6 +6,7 @@ import { Search, ShoppingBag, User, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCart } from "@/lib/CartContext";
+import SearchOverlay from "@/components/SearchOverlay";
 
 const navLinks = [
     { href: "/", label: "Home" },
@@ -16,6 +17,7 @@ const navLinks = [
 export default function Navbar() {
     const [isScrolled, setIsScrolled] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
     const { cartCount, setIsCartOpen } = useCart();
 
     useEffect(() => {
@@ -63,7 +65,7 @@ export default function Navbar() {
 
                     {/* Icons */}
                     <div className="flex items-center gap-6 text-white">
-                        <button className="hover:text-gold transition-colors">
+                        <button onClick={() => setIsSearchOpen(true)} className="hover:text-gold transition-colors">
                             <Search size={20} />
                         </button>
                         <Link href="/portal/login" className="hover:text-gold transition-colors">
@@ -122,6 +124,9 @@ export default function Navbar() {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Search Overlay */}
+            <SearchOverlay isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
         </>
     );
 }
