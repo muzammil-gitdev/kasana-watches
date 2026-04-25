@@ -66,9 +66,9 @@ export default function Navbar() {
                         <button className="hover:text-gold transition-colors">
                             <Search size={20} />
                         </button>
-                        <button className="hover:text-gold transition-colors">
+                        <Link href="/portal/login" className="hover:text-gold transition-colors">
                             <User size={20} />
-                        </button>
+                        </Link>
                         <button
                             onClick={() => setIsCartOpen(true)}
                             className="hover:text-gold transition-colors relative"
