@@ -17,7 +17,10 @@ import {
     ChevronRight,
     Check,
 } from "lucide-react";
-import { watchesData, categoryTitles } from "@/lib/products";
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { useEffect } from "react";
+import { categoryTitles } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
 import { useCart } from "@/lib/CartContext";
 
@@ -28,9 +31,34 @@ export default function ProductDetailContent({ category, id }) {
     const [activeTab, setActiveTab] = useState("description");
     const { addToCart } = useCart();
 
-    // Find the product
-    const watches = watchesData[category] || watchesData.men;
-    const product = watches.find((w) => w.id === parseInt(id));
+    const [product, setProduct] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchProduct = async () => {
+            setLoading(true);
+            try {
+                const docRef = doc(db, "products", id);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setProduct({ id: docSnap.id, ...docSnap.data() });
+                }
+            } catch (error) {
+                console.error("Fetch error:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchProduct();
+    }, [id]);
+
+    if (loading) {
+        return (
+            <main className="min-h-screen bg-background pt-24 flex items-center justify-center">
+                <div className="w-12 h-12 border-4 border-gold border-t-transparent rounded-full animate-spin" />
+            </main>
+        );
+    }
 
     if (!product) {
         return (

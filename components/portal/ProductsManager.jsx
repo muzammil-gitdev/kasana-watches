@@ -1,13 +1,18 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import {
   Plus, Search, Edit3, Trash2, X, Upload, Package, Star, Eye,
+  Loader2,
 } from "lucide-react";
-import { watchesData } from "@/lib/products";
+import { db } from "@/lib/firebase";
+import { 
+  collection, addDoc, updateDoc, deleteDoc, doc, 
+  getDocs, query, orderBy, serverTimestamp 
+} from "firebase/firestore";
 
 function formatPrice(v) {
   return new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", minimumFractionDigits: 0 }).format(v);
@@ -15,7 +20,7 @@ function formatPrice(v) {
 
 const emptyProduct = {
   name: "", price: "", originalPrice: "", category: "men",
-  description: "", isNew: false, isSale: false,
+  description: "", isNew: false, isSale: false, isVisible: true,
   rating: "", reviews: "",
   image: "", images: [],
   features: [""],
@@ -26,18 +31,46 @@ const emptyProduct = {
 function ProductForm({ product, onSave, onCancel }) {
   const [form, setForm] = useState(product || { ...emptyProduct });
   const [previewImages, setPreviewImages] = useState(product?.images || []);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const fileRef = useRef(null);
 
   const set = (key, val) => setForm((p) => ({ ...p, [key]: val }));
   const setSpec = (key, val) => setForm((p) => ({ ...p, specs: { ...p.specs, [key]: val } }));
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files || []);
-    files.forEach((file) => {
-      const url = URL.createObjectURL(file);
-      setPreviewImages((p) => [...p, url]);
-      setForm((p) => ({ ...p, images: [...p.images, url], image: p.image || url }));
-    });
+    if (files.length === 0) return;
+
+    setIsUploading(true);
+    const newImages = [...form.images];
+    const newPreviews = [...previewImages];
+
+    try {
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (data.url) {
+          newImages.push(data.url);
+          newPreviews.push(data.url);
+        }
+      }
+
+      setPreviewImages(newPreviews);
+      setForm((p) => ({ ...p, images: newImages, image: newImages[0] || "" }));
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Failed to upload image");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const removeImage = (idx) => {
@@ -124,8 +157,12 @@ function ProductForm({ product, onSave, onCancel }) {
         </section>
 
         {/* ─ Toggles ─ */}
-        <section className="flex gap-6">
-          {[{ key: "isNew", label: "Mark as New" }, { key: "isSale", label: "On Sale" }].map(({ key, label }) => (
+        <section className="flex flex-wrap gap-6">
+          {[
+            { key: "isNew", label: "Mark as New" }, 
+            { key: "isSale", label: "On Sale" },
+            { key: "isVisible", label: "Active/Visible" }
+          ].map(({ key, label }) => (
             <label key={key} className="flex items-center gap-3 cursor-pointer group">
               <div className={`w-11 h-6 rounded-full transition-colors relative ${form[key] ? "bg-gold" : "bg-white/10"}`}
                 onClick={() => set(key, !form[key])}>
@@ -185,11 +222,22 @@ function ProductForm({ product, onSave, onCancel }) {
 
       {/* Actions */}
       <div className="flex justify-end gap-3 p-6 border-t border-white/10">
-        <button onClick={onCancel} className="px-6 py-3 rounded-xl text-sm font-medium text-gray-400 border border-white/10 hover:bg-white/5 transition-colors">
+        <button onClick={onCancel} disabled={isSaving || isUploading} className="px-6 py-3 rounded-xl text-sm font-medium text-gray-400 border border-white/10 hover:bg-white/5 transition-colors disabled:opacity-50">
           Cancel
         </button>
-        <button onClick={() => onSave(form)}
-          className="px-6 py-3 rounded-xl text-sm font-medium bg-gradient-to-r from-gold to-gold-dark text-black hover:opacity-90 transition-opacity">
+        <button 
+          onClick={async () => {
+            setIsSaving(true);
+            try {
+              await onSave(form);
+            } finally {
+              setIsSaving(false);
+            }
+          }}
+          disabled={isSaving || isUploading}
+          className="px-6 py-3 rounded-xl text-sm font-medium bg-gradient-to-r from-gold to-gold-dark text-black hover:opacity-90 transition-opacity flex items-center gap-2 disabled:opacity-50"
+        >
+          {isSaving && <Loader2 size={16} className="animate-spin" />}
           {product ? "Update Product" : "Add Product"}
         </button>
       </div>
@@ -204,12 +252,48 @@ export default function ProductsManager() {
   const [editProduct, setEditProduct] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const allProducts = Object.entries(watchesData).flatMap(([cat, items]) =>
-    items.map((p) => ({ ...p, category: cat }))
-  );
+  // Load products from Firestore
+  const fetchProducts = async () => {
+    setLoading(true);
+    try {
+      const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
+      const querySnapshot = await getDocs(q);
+      const items = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setProducts(items);
+    } catch (error) {
+      console.error("Fetch error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const filtered = allProducts.filter((p) => {
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div className="h-10 w-48 bg-white/5 rounded-lg animate-pulse" />
+          <div className="h-10 w-32 bg-white/5 rounded-lg animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="aspect-[4/5] bg-white/5 rounded-2xl border border-white/10 animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const filtered = products.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchCat = categoryFilter === "all" || p.category === categoryFilter;
     return matchSearch && matchCat;
@@ -220,11 +304,49 @@ export default function ProductsManager() {
     setShowForm(true);
   };
 
-  const handleSave = (product) => {
-    // In a real app, this would call an API
-    alert(`Product "${product.name}" saved successfully!`);
-    setShowForm(false);
-    setEditProduct(null);
+  const handleSave = async (productData) => {
+    try {
+      const cleanData = {
+        ...productData,
+        price: parseFloat(productData.price),
+        originalPrice: productData.originalPrice ? parseFloat(productData.originalPrice) : null,
+        rating: parseFloat(productData.rating) || 0,
+        reviews: parseInt(productData.reviews) || 0,
+        updatedAt: serverTimestamp(),
+      };
+
+      if (editProduct) {
+        const productRef = doc(db, "products", editProduct.id);
+        await updateDoc(productRef, cleanData);
+      } else {
+        cleanData.createdAt = serverTimestamp();
+        const docRef = await addDoc(collection(db, "products"), cleanData);
+        
+        // Trigger newsletter for new product
+        fetch("/api/newsletter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productName: cleanData.name }),
+        }).catch(err => console.error("Newsletter trigger failed:", err));
+      }
+
+      await fetchProducts();
+      setShowForm(false);
+      setEditProduct(null);
+    } catch (error) {
+      console.error("Save error:", error);
+      alert("Failed to save product");
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("Are you sure you want to delete this product?")) return;
+    try {
+      await deleteDoc(doc(db, "products", id));
+      await fetchProducts();
+    } catch (error) {
+      console.error("Delete error:", error);
+    }
   };
 
   return (
@@ -290,13 +412,15 @@ export default function ProductsManager() {
                 <div className="absolute top-3 left-3 flex gap-2">
                   {p.isNew && <span className="bg-gold text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">New</span>}
                   {p.isSale && <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Sale</span>}
+                  {!p.isVisible && <span className="bg-gray-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Hidden</span>}
                 </div>
                 <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button onClick={() => handleEdit(p)}
                     className="w-8 h-8 rounded-lg bg-black/60 backdrop-blur-sm flex items-center justify-center text-white hover:text-gold transition-colors">
                     <Edit3 size={14} />
                   </button>
-                  <button className="w-8 h-8 rounded-lg bg-black/60 backdrop-blur-sm flex items-center justify-center text-white hover:text-red-400 transition-colors">
+                  <button className="w-8 h-8 rounded-lg bg-black/60 backdrop-blur-sm flex items-center justify-center text-white hover:text-red-400 transition-colors"
+                    onClick={() => handleDelete(p.id)}>
                     <Trash2 size={14} />
                   </button>
                 </div>

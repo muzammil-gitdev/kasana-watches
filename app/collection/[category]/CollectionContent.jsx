@@ -7,12 +7,14 @@ import { motion } from "framer-motion";
 import { SlidersHorizontal, X, ChevronDown } from "lucide-react";
 import WatchCard from "@/components/WatchCard";
 import {
-    watchesData,
     categoryTitles,
     categoryDescriptions,
     categoryHeroImages,
     sortOptions,
-} from "@/lib/products";
+} from "@/lib/constants";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
+import { useEffect } from "react";
 
 export default function CollectionContent({ category }) {
     const [sortBy, setSortBy] = useState("featured");
@@ -21,10 +23,33 @@ export default function CollectionContent({ category }) {
     const [showOnlySale, setShowOnlySale] = useState(false);
     const [showOnlyNew, setShowOnlyNew] = useState(false);
 
-    const watches = watchesData[category] || watchesData.men;
+    const [watches, setWatches] = useState([]);
+    const [loading, setLoading] = useState(true);
+
     const title = categoryTitles[category] || "Collection";
     const description = categoryDescriptions[category] || "";
     const heroImage = categoryHeroImages[category] || categoryHeroImages.men;
+
+    useEffect(() => {
+        const fetchWatches = async () => {
+            setLoading(true);
+            try {
+                const q = query(
+                    collection(db, "products"),
+                    where("category", "==", category),
+                    where("isVisible", "==", true)
+                );
+                const snapshot = await getDocs(q);
+                const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setWatches(items);
+            } catch (error) {
+                console.error("Fetch error:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchWatches();
+    }, [category]);
 
     const filteredAndSortedWatches = useMemo(() => {
         let result = [...watches];
@@ -212,11 +237,19 @@ export default function CollectionContent({ category }) {
                     </motion.div>
 
                     {/* Product Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {filteredAndSortedWatches.map((watch, index) => (
-                            <WatchCard key={watch.id} watch={watch} index={index} category={category} />
-                        ))}
-                    </div>
+                    {loading ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {[...Array(8)].map((_, i) => (
+                                <div key={i} className="aspect-square bg-white/5 rounded-xl animate-pulse" />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {filteredAndSortedWatches.map((watch, index) => (
+                                <WatchCard key={watch.id} watch={watch} index={index} category={category} />
+                            ))}
+                        </div>
+                    )}
 
                     {/* No Results */}
                     {filteredAndSortedWatches.length === 0 && (

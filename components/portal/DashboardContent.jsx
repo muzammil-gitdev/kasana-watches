@@ -4,48 +4,68 @@ import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   TrendingUp, TrendingDown, DollarSign, Package, ShoppingCart,
-  Eye, ArrowUpRight, Star, Clock,
+  Star, Loader2,
 } from "lucide-react";
-import { watchesData } from "@/lib/products";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 
 /* ── helpers ─────────────────────────────────────────────── */
 function formatPrice(v) {
   return new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", minimumFractionDigits: 0 }).format(v);
 }
 
-function allProducts() {
-  return Object.entries(watchesData).flatMap(([cat, items]) =>
-    items.map((p) => ({ ...p, category: cat }))
-  );
-}
 
 /* ── mock analytics derived from real catalog ────────────── */
 function useAnalytics() {
-  const products = allProducts();
-  const totalProducts = products.length;
-  const totalRevenue = products.reduce((s, p) => s + p.price * (Math.floor(Math.random() * 8) + 1), 0);
-  const totalOrders = 847;
-  const avgRating = (products.reduce((s, p) => s + p.rating, 0) / totalProducts).toFixed(1);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const monthlySales = [42, 58, 35, 71, 63, 89, 76, 95, 83, 102, 91, 118];
-  const monthlyRevenue = [1.2, 1.7, 1.0, 2.1, 1.8, 2.6, 2.2, 2.8, 2.4, 3.0, 2.7, 3.5];
-  const categoryBreakdown = [
-    { label: "Men", count: watchesData.men.length, color: "#d4af37", pct: 40 },
-    { label: "Women", count: watchesData.women.length, color: "#a78bfa", pct: 30 },
-    { label: "Couples", count: watchesData.couples.length, color: "#34d399", pct: 30 },
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const productSnap = await getDocs(collection(db, "products"));
+        const orderSnap = await getDocs(collection(db, "orders"));
 
-  const topSelling = products.sort((a, b) => b.reviews - a.reviews).slice(0, 5);
+        const products = productSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const orders = orderSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-  const recentOrders = [
-    { id: "KW-0001", customer: "Ahmed K.", product: "Chronograph Elite", total: 24999, status: "delivered" },
-    { id: "KW-0002", customer: "Sara A.", product: "Rose Gold Elegance", total: 22999, status: "shipped" },
-    { id: "KW-0003", customer: "Hassan R.", product: "Eternal Bond Set", total: 45999, status: "processing" },
-    { id: "KW-0004", customer: "Fatima N.", product: "Diamond Luxe", total: 65999, status: "pending" },
-    { id: "KW-0005", customer: "Bilal S.", product: "Royal Automatic", total: 42999, status: "delivered" },
-  ];
+        const totalRevenue = orders.reduce((s, o) => s + (o.total || 0), 0);
+        const totalOrders = orders.length;
+        const totalProducts = products.length;
+        const avgRating = (products.reduce((s, p) => s + (p.rating || 0), 0) / (totalProducts || 1)).toFixed(1);
 
-  return { totalProducts, totalRevenue, totalOrders, avgRating, monthlySales, monthlyRevenue, categoryBreakdown, topSelling, recentOrders };
+        const categoryBreakdown = [
+          { label: "Men", count: products.filter(p => p.category === "men").length, color: "#d4af37", pct: 0 },
+          { label: "Women", count: products.filter(p => p.category === "women").length, color: "#a78bfa", pct: 0 },
+          { label: "Couples", count: products.filter(p => p.category === "couples").length, color: "#34d399", pct: 0 },
+        ];
+        const totalCount = products.length || 1;
+        categoryBreakdown.forEach(c => c.pct = (c.count / totalCount) * 100);
+
+        const topSelling = [...products].sort((a, b) => (b.reviews || 0) - (a.reviews || 0)).slice(0, 5);
+        const recentOrders = orders.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds).slice(0, 5).map(o => ({
+          id: o.id.slice(0, 8).toUpperCase(),
+          customer: `${o.customerInfo?.firstName} ${o.customerInfo?.lastName}`,
+          product: o.items?.[0]?.name || "Luxury Watch",
+          total: o.total,
+          status: o.status || "delivered"
+        }));
+
+        // Mock chart data based on real volume for now, or group orders by month
+        const monthlySales = [42, 58, 35, 71, 63, 89, 76, 95, 83, 102, 91, 118];
+        const monthlyRevenue = [1.2, 1.7, 1.0, 2.1, 1.8, 2.6, 2.2, 2.8, 2.4, 3.0, 2.7, 3.5];
+
+        setData({ totalProducts, totalRevenue, totalOrders, avgRating, monthlySales, monthlyRevenue, categoryBreakdown, topSelling, recentOrders });
+      } catch (err) {
+        console.error("Analytics fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  return { ...data, loading };
 }
 
 /* ── mini bar chart (pure canvas) ────────────────────────── */
@@ -254,6 +274,7 @@ function KpiCard({ icon: Icon, label, value, change, positive, delay }) {
 
 /* ── status badge ────────────────────────────────────────── */
 const statusMap = {
+  placed: { cls: "text-blue-400 bg-blue-400/10 border-blue-400/20", lbl: "Placed" },
   delivered: { cls: "text-emerald-400 bg-emerald-400/10 border-emerald-400/20", lbl: "Delivered" },
   shipped: { cls: "text-purple-400 bg-purple-400/10 border-purple-400/20", lbl: "Shipped" },
   processing: { cls: "text-blue-400 bg-blue-400/10 border-blue-400/20", lbl: "Processing" },
@@ -264,6 +285,24 @@ const statusMap = {
 export default function DashboardContent() {
   const a = useAnalytics();
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  if (a.loading) {
+    return (
+      <div className="space-y-8 animate-pulse">
+        <div className="h-10 w-48 bg-white/5 rounded-lg mb-2" />
+        <div className="h-4 w-64 bg-white/5 rounded-lg" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-32 bg-white/5 rounded-2xl border border-white/10" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="h-64 bg-white/5 rounded-2xl border border-white/10" />
+          <div className="h-64 bg-white/5 rounded-2xl border border-white/10" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -371,7 +410,9 @@ export default function DashboardContent() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-white font-medium">{formatPrice(o.total)}</p>
-                    <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full border ${s.cls}`}>{s.lbl}</span>
+                    <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full border ${s?.cls || "text-gray-400 bg-white/5 border-white/10"}`}>
+                      {s?.lbl || "Order"}
+                    </span>
                   </div>
                 </div>
               );

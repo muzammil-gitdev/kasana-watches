@@ -5,21 +5,31 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, X, ArrowRight, Star, Tag } from "lucide-react";
-import { watchesData, categoryTitles } from "@/lib/products";
+import { db } from "@/lib/firebase";
+import { collection, getDocs } from "firebase/firestore";
+import { categoryTitles } from "@/lib/constants";
 import { formatPrice } from "@/lib/utils";
 
-/* Flatten all products into a single searchable list */
-function getAllProducts() {
-  return Object.entries(watchesData).flatMap(([category, items]) =>
-    items.map((item) => ({ ...item, category }))
-  );
-}
 
 export default function SearchOverlay({ isOpen, onClose }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef(null);
   const router = useRouter();
-  const allProducts = useMemo(() => getAllProducts(), []);
+  const [allProducts, setAllProducts] = useState([]);
+
+  // Fetch all products for search
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const snap = await getDocs(collection(db, "products"));
+        const items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setAllProducts(items);
+      } catch (error) {
+        console.error("Search fetch error:", error);
+      }
+    };
+    if (isOpen) fetchAll();
+  }, [isOpen]);
 
   // Focus input when opened
   useEffect(() => {
@@ -73,8 +83,8 @@ export default function SearchOverlay({ isOpen, onClose }) {
     router.push(`/product/${product.category}/${product.id}`);
   };
 
-  // Quick category suggestions when search is empty
-  const categories = Object.keys(watchesData);
+  // Quick category suggestions
+  const categories = Object.keys(categoryTitles);
 
   return (
     <AnimatePresence>

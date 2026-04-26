@@ -11,7 +11,9 @@ import {
   Eye,
   MoreVertical,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, query, orderBy, doc, updateDoc } from "firebase/firestore";
 
 const mockOrders = [
   {
@@ -113,6 +115,13 @@ const mockOrders = [
 ];
 
 const statusConfig = {
+  placed: {
+    icon: Clock,
+    color: "text-blue-400",
+    bg: "bg-blue-400/10",
+    border: "border-blue-400/20",
+    label: "Placed",
+  },
   pending: {
     icon: Clock,
     color: "text-yellow-400",
@@ -154,8 +163,48 @@ function formatPrice(price) {
 export default function OrdersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredOrders = mockOrders.filter((order) => {
+  const fetchOrders = async () => {
+    setLoading(true);
+    try {
+      const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+      const snap = await getDocs(q);
+      const items = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        // Format for table
+        customer: `${doc.data().customerInfo?.firstName} ${doc.data().customerInfo?.lastName}`,
+        email: doc.data().customerInfo?.email,
+        product: doc.data().items?.[0]?.name + (doc.data().items?.length > 1 ? ` + ${doc.data().items.length - 1} more` : ""),
+        category: doc.data().items?.[0]?.category,
+        quantity: doc.data().items?.reduce((s, i) => s + i.quantity, 0),
+        date: doc.data().createdAt?.toDate() || new Date(),
+        paymentMethod: "COD" // Currently only COD
+      }));
+      setOrders(items);
+    } catch (error) {
+      console.error("Orders fetch error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  const handleUpdateStatus = async (orderId, newStatus) => {
+    try {
+      await updateDoc(doc(db, "orders", orderId), { status: newStatus });
+      await fetchOrders();
+    } catch (error) {
+      console.error("Update error:", error);
+    }
+  };
+
+  const filteredOrders = orders.filter((order) => {
     const matchesSearch =
       order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -166,12 +215,29 @@ export default function OrdersPage() {
   });
 
   const statusCounts = {
-    all: mockOrders.length,
-    pending: mockOrders.filter((o) => o.status === "pending").length,
-    processing: mockOrders.filter((o) => o.status === "processing").length,
-    shipped: mockOrders.filter((o) => o.status === "shipped").length,
-    delivered: mockOrders.filter((o) => o.status === "delivered").length,
+    all: orders.length,
+    placed: orders.filter((o) => o.status === "placed").length,
+    pending: orders.filter((o) => o.status === "pending").length,
+    processing: orders.filter((o) => o.status === "processing").length,
+    shipped: orders.filter((o) => o.status === "shipped").length,
+    delivered: orders.filter((o) => o.status === "delivered").length,
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-8 animate-pulse">
+        <div className="h-10 w-48 bg-white/5 rounded-lg mb-2" />
+        <div className="h-4 w-64 bg-white/5 rounded-lg" />
+        <div className="flex gap-3">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-10 w-24 bg-white/5 rounded-lg" />
+          ))}
+        </div>
+        <div className="h-12 w-full bg-white/5 rounded-xl" />
+        <div className="h-96 w-full bg-white/5 rounded-2xl border border-white/10" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -223,8 +289,8 @@ export default function OrdersPage() {
       </div>
 
       {/* Orders Table */}
-      <div className="bg-white/[0.02] border border-white/10 rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-white/[0.02] border border-white/10 rounded-2xl">
+        <div className="overflow-x-auto pb-40">
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/10">
@@ -261,7 +327,7 @@ export default function OrdersPage() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05 }}
-                    className="border-b border-white/5 hover:bg-white/[0.03] transition-colors"
+                    className="border-b border-white/5 hover:bg-white/[0.03] transition-colors hover:relative hover:z-20"
                   >
                     <td className="px-6 py-4">
                       <span className="text-gold font-mono text-sm">
@@ -288,12 +354,27 @@ export default function OrdersPage() {
                       {formatPrice(order.total)}
                     </td>
                     <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${status.bg} ${status.color} ${status.border}`}
-                      >
-                        <StatusIcon size={12} />
-                        {status.label}
-                      </span>
+                      <div className="relative group/status">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border cursor-pointer ${status?.bg || "bg-white/5"} ${status?.color || "text-white"} ${status?.border || "border-white/10"}`}
+                        >
+                          <StatusIcon size={12} />
+                          {status?.label || "Unknown"}
+                        </span>
+                        
+                        {/* Status Quick Select */}
+                        <div className="absolute left-0 top-full mt-1 hidden group-hover/status:block z-50 bg-charcoal border border-white/10 rounded-lg shadow-xl p-1 min-w-[120px]">
+                          {Object.entries(statusConfig).map(([key, config]) => (
+                            <button
+                              key={key}
+                              onClick={() => handleUpdateStatus(order.id, key)}
+                              className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-white/5 rounded transition-colors"
+                            >
+                              {config.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-gray-400 text-sm">
                       {new Date(order.date).toLocaleDateString("en-PK", {

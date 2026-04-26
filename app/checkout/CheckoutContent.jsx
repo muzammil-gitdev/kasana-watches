@@ -190,12 +190,36 @@ export default function CheckoutContent() {
         if (!validateAll() || cartItems.length === 0) return;
 
         setIsSubmitting(true);
-        // Simulate processing
-        await new Promise((r) => setTimeout(r, 2000));
-        const num = "KW-" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
-        setOrderNumber(num);
-        clearCart();
-        setIsSubmitting(false);
+        
+        try {
+            const orderPayload = {
+                customerInfo: form,
+                items: cartItems,
+                subtotal: cartTotal,
+                shipping,
+                total,
+            };
+
+            const res = await fetch("/api/orders", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(orderPayload),
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+                setOrderNumber(data.orderId);
+                clearCart();
+            } else {
+                alert("Failed to place order. Please try again.");
+            }
+        } catch (error) {
+            console.error("Checkout error:", error);
+            alert("An error occurred. Please try again.");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     /* ─── input helper ─── */

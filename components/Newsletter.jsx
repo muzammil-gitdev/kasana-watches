@@ -3,14 +3,41 @@
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
+import { db } from "@/lib/firebase";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
 export default function Newsletter() {
     const [email, setEmail] = useState("");
 
-    const handleSubmit = (e) => {
+    const [status, setStatus] = useState("idle"); // idle, loading, success, error, duplicate
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        // Handle subscription
-        setEmail("");
+        setStatus("loading");
+        
+        try {
+            const emailRef = doc(db, "subscribed_users_email", email.toLowerCase().trim());
+            const docSnap = await getDoc(emailRef);
+
+            if (docSnap.exists()) {
+                setStatus("duplicate");
+                setTimeout(() => setStatus("idle"), 3000);
+                return;
+            }
+
+            await setDoc(emailRef, {
+                email: email.toLowerCase().trim(),
+                subscribedAt: serverTimestamp(),
+            });
+
+            setStatus("success");
+            setEmail("");
+            setTimeout(() => setStatus("idle"), 5000);
+        } catch (error) {
+            console.error("Subscription error:", error);
+            setStatus("error");
+            setTimeout(() => setStatus("idle"), 3000);
+        }
     };
 
     return (
@@ -54,11 +81,22 @@ export default function Newsletter() {
                         />
                         <button
                             type="submit"
+                            disabled={status === "loading"}
                             className="text-gold hover:text-white transition-colors p-2"
                         >
-                            <ArrowRight size={24} />
+                            <ArrowRight size={24} className={status === "loading" ? "animate-pulse" : ""} />
                         </button>
                     </motion.form>
+                    
+                    {status === "success" && (
+                        <p className="text-emerald-400 mt-4 text-sm">Welcome to the Inner Circle!</p>
+                    )}
+                    {status === "duplicate" && (
+                        <p className="text-gold mt-4 text-sm">You are already subscribed.</p>
+                    )}
+                    {status === "error" && (
+                        <p className="text-red-400 mt-4 text-sm">Something went wrong. Please try again.</p>
+                    )}
                 </div>
             </div>
         </section>

@@ -40,9 +40,14 @@ export default function PortalSidebar() {
   const router = useRouter();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  const handleLogout = () => {
-    localStorage.removeItem("kasana_admin");
-    router.push("/portal/login");
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.push("/portal/login");
+      router.refresh();
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
   };
 
   const isActive = (href) => {

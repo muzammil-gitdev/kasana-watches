@@ -1,4 +1,4 @@
-import { categoryTitles, categoryDescriptions } from "@/lib/products";
+import { categoryTitles, categoryDescriptions } from "@/lib/constants";
 import CollectionContent from "./CollectionContent";
 
 export async function generateMetadata({ params }) {
